@@ -1,0 +1,91 @@
+require("dotenv").config();
+const express = require("express");
+const path = require("path");
+const { GoogleGenerativeAI } = require("@google/generative-ai");
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+app.use(express.json());
+app.use(express.static(path.join(__dirname, "public")));
+
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+
+app.post("/api/generate-story", async (req, res) => {
+  try {
+    const { topic, genre, characters, panels } = req.body;
+
+    if (!topic || !topic.trim()) {
+      return res.status(400).json({ error: "Please enter a story idea." });
+    }
+
+    if (!process.env.GEMINI_API_KEY) {
+      return res.status(500).json({ error: "GEMINI_API_KEY is not configured." });
+    }
+
+    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+
+    const prompt = `
+You are ComicCraft, an AI comic-story creator.
+Create a short comic story based on the following details.
+
+Story idea: ${topic}
+Genre: ${genre || "Adventure"}
+Characters: ${characters || "Create suitable characters"}
+Number of panels: ${panels || 6}
+
+Return ONLY valid JSON in this exact structure:
+{
+  "title": "string",
+  "logline": "string",
+  "characters": [
+    {"name": "string", "description": "string"}
+  ],
+  "panels": [
+    {
+      "number": 1,
+      "scene": "string",
+      "visual": "string",
+      "dialogue": "string",
+      "caption": "string"
+    }
+  ]
+}
+
+Make the dialogue concise and suitable for comic panels.
+`;
+
+    const result = await model.generateContent(prompt);
+    const raw = result.response.text().trim();
+
+    const cleaned = raw
+      .replace(/^```json\s*/i, "")
+      .replace(/^```\s*/i, "")
+      .replace(/\s*```$/i, "")
+      .trim();
+
+    let story;
+    try {
+      story = JSON.parse(cleaned);
+    } catch {
+      return res.status(500).json({
+        error: "Gemini returned an unexpected format. Please try again."
+      });
+    }
+
+    res.json(story);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      error: error.message || "Failed to generate the comic story."
+    });
+  }
+});
+
+app.get("*", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "index.html"));
+});
+
+app.listen(PORT, () => {
+  console.log(`ComicCraft running at http://localhost:${PORT}`);
+});
