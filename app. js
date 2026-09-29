@@ -1,0 +1,86 @@
+const generateBtn = document.getElementById("generateBtn");
+const status = document.getElementById("status");
+const result = document.getElementById("result");
+const printBtn = document.getElementById("printBtn");
+
+generateBtn.addEventListener("click", async () => {
+  const topic = document.getElementById("topic").value.trim();
+  const genre = document.getElementById("genre").value;
+  const panels = Number(document.getElementById("panels").value);
+  const characters = document.getElementById("characters").value.trim();
+
+  if (!topic) {
+    status.textContent = "Please enter a story idea.";
+    return;
+  }
+
+  generateBtn.disabled = true;
+  generateBtn.textContent = "⏳ Creating...";
+  status.textContent = "Gemini is creating your comic story...";
+  result.classList.add("hidden");
+
+  try {
+    const response = await fetch("/api/generate-story", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ topic, genre, panels, characters })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) throw new Error(data.error || "Generation failed.");
+
+    renderStory(data);
+    status.textContent = "Comic created successfully!";
+    result.classList.remove("hidden");
+    result.scrollIntoView({ behavior: "smooth" });
+  } catch (error) {
+    status.textContent = "Error: " + error.message;
+  } finally {
+    generateBtn.disabled = false;
+    generateBtn.textContent = "✨ Generate Comic";
+  }
+});
+
+function renderStory(story) {
+  document.getElementById("title").textContent = story.title || "Untitled Comic";
+  document.getElementById("logline").textContent = story.logline || "";
+
+  const charactersBox = document.getElementById("characters");
+  charactersBox.innerHTML = "";
+
+  (story.characters || []).forEach(c => {
+    const div = document.createElement("div");
+    div.className = "character";
+    div.innerHTML = `<strong>${escapeHtml(c.name)}</strong><br>${escapeHtml(c.description)}`;
+    charactersBox.appendChild(div);
+  });
+
+  const grid = document.getElementById("panelsGrid");
+  grid.innerHTML = "";
+
+  (story.panels || []).forEach(panel => {
+    const article = document.createElement("article");
+    article.className = "panel";
+    article.innerHTML = `
+      <div class="panel-number">${panel.number}</div>
+      <h3>Panel ${panel.number}</h3>
+      <p><strong>Scene:</strong> ${escapeHtml(panel.scene || "")}</p>
+      <div class="visual">🎨 ${escapeHtml(panel.visual || "")}</div>
+      <div class="dialogue">💬 ${escapeHtml(panel.dialogue || "No dialogue")}</div>
+      <div class="caption">${escapeHtml(panel.caption || "")}</div>
+    `;
+    grid.appendChild(article);
+  });
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+printBtn.addEventListener("click", () => window.print());
